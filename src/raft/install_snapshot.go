@@ -47,16 +47,17 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	// 8. Reset state machine using snapshot contents (and load snapshot’s
 	//    cluster configuration)
 	firstLogIndex := rf.logs[0].Index
-	if firstLogIndex <= args.LastIncludedIndex {
-		rf.logs = append([]Entry{}, Entry{
-			Index:   args.LastIncludedIndex,
-			Term:    args.LastIncludedTerm,
-			Command: nil,
-		})
-	} else if firstLogIndex < args.LastIncludedIndex {
-		trimLen := args.LastIncludedIndex - firstLogIndex
-		rf.logs = append([]Entry{}, rf.logs[trimLen:]...)
+	snapshotOffset := args.LastIncludedIndex - firstLogIndex
+	if snapshotOffset >= 0 &&
+		snapshotOffset < len(rf.logs) &&
+		rf.logs[snapshotOffset].Term == args.LastIncludedTerm {
+		rf.logs = append([]Entry{}, rf.logs[snapshotOffset:]...)
 		rf.logs[0].Command = nil
+	} else {
+		rf.logs = []Entry{{
+			Index: args.LastIncludedIndex,
+			Term:  args.LastIncludedTerm,
+		}}
 	}
 	rf.persister.Save(rf.encodeState(), args.Data)
 	rf.smsg = &ApplyMsg{

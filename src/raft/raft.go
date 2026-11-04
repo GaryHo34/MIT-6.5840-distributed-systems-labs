@@ -187,7 +187,7 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	// if the snapshot is outdated, just ignore it
-	if rf.logs[0].Index >= index {
+	if rf.logs[0].Index >= index || index > rf.logs[len(rf.logs)-1].Index {
 		return
 	}
 	firstLogIndex := rf.logs[0].Index
@@ -255,14 +255,19 @@ func (rf *Raft) checkRequestTerm(args, reply RaftRPC) bool {
 // If RPC request or response contains term T > currentTerm:
 // set currentTerm = T, convert to follower (§5.1)
 func (rf *Raft) checkResponseTerm(args, reply RaftRPC, isElection bool) bool {
-	argsTerm := args.GetTerm()
 	replyTerm := reply.GetTerm()
-	if replyTerm > argsTerm {
+	if replyTerm > rf.currentTerm {
 		rf.resetNewTermState(replyTerm)
 		rf.resetElectionTimer()
 		return false
 	}
-	return isElection || (rf.state == LEADER)
+	if args.GetTerm() != rf.currentTerm {
+		return false
+	}
+	if isElection {
+		return rf.state == CANDIDATE
+	}
+	return rf.state == LEADER
 }
 
 // the tester doesn't halt goroutines created by Raft after each test,
